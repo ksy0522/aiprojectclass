@@ -2,11 +2,16 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
-import json
 from datetime import datetime, timedelta
+
+try:
+    import plotly.graph_objects as go
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+    PLOTLY_OK = True
+except ImportError:
+    st.error("plotly 패키지가 설치되지 않았습니다. requirements.txt에 plotly를 추가하세요.")
+    st.stop()
 
 # ── 페이지 설정 ──────────────────────────────────────────────────────────────
 st.set_page_config(
