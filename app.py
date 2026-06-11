@@ -453,8 +453,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 탭
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab_lab, tab2, tab3, tab4 = st.tabs([
     "📖 1차시 · 수업 개요",
+    "🌿 1.5차시 · 생장 조건 탐구",
     "📊 2차시 · 데이터 분석",
     "⚡ 3차시 · 최적화 설계",
     "🏆 4차시 · 결과 발표",
@@ -581,6 +582,331 @@ if st.session_state.get("run_analysis") and "region_data_cache" not in st.sessio
 region_data = st.session_state.get("region_data_cache", {})
 display_crop = st.session_state.get("analysis_crop", selected_crop)
 display_area = st.session_state.get("analysis_area", farm_area)
+
+
+
+# ════════════════════════════════════════════════════════
+# TAB LAB — 생장 조건 탐구 실험실 (1.5차시)
+# ════════════════════════════════════════════════════════
+with tab_lab:
+    st.markdown("""
+    <div class="step-badge">🌿 1.5차시 · 생장 조건 탐구 실험실</div>
+    <div style="font-size:13px; color:#555; margin-bottom:20px;">
+      <span class="tag-bio">생명과학</span>&nbsp;<span class="tag-physics">물리</span>&nbsp;<span class="tag-math">수학</span>&nbsp;
+      슬라이더로 환경 변수를 조절하며 식물 생장에 미치는 영향을 직접 탐구합니다.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ── 작물 선택 ──
+    lab_crop = st.selectbox(
+        "탐구할 작물 선택",
+        list(CROPS.keys()),
+        format_func=lambda c: f"{CROPS[c]['emoji']} {c}",
+        key="lab_crop"
+    )
+    lc = CROPS[lab_crop]
+
+    st.markdown("---")
+
+    # ── 슬라이더 3개 ──
+    col_s1, col_s2, col_s3 = st.columns(3)
+    with col_s1:
+        st.markdown(f"""<div class="card" style="border-left-color:#F4A261;">
+          <div class="card-title">☀️ 일사량 <span class="tag-physics">물리</span></div>
+          <div style="font-size:11px; color:#888; margin-bottom:8px;">
+            빛 에너지가 광합성에 필요한 ATP와 NADPH를 생성합니다.
+          </div>
+        </div>""", unsafe_allow_html=True)
+        lab_solar = st.slider("일사량 (W/m²)", 0, 800, 300, 10, key="lab_solar",
+                               label_visibility="collapsed")
+
+    with col_s2:
+        st.markdown(f"""<div class="card" style="border-left-color:#E76F51;">
+          <div class="card-title">🌡️ 온도 <span class="tag-bio">생명과학</span></div>
+          <div style="font-size:11px; color:#888; margin-bottom:8px;">
+            효소 활성에 영향을 주어 광합성·호흡 속도를 결정합니다.
+          </div>
+        </div>""", unsafe_allow_html=True)
+        lab_temp = st.slider("온도 (°C)", 0, 45, 22, 1, key="lab_temp",
+                              label_visibility="collapsed")
+
+    with col_s3:
+        st.markdown(f"""<div class="card" style="border-left-color:#457B9D;">
+          <div class="card-title">💧 습도 <span class="tag-bio">생명과학</span></div>
+          <div style="font-size:11px; color:#888; margin-bottom:8px;">
+            기공 개폐에 영향을 주어 CO₂ 흡수와 증산작용을 조절합니다.
+          </div>
+        </div>""", unsafe_allow_html=True)
+        lab_humid = st.slider("습도 (%)", 0, 100, 65, 1, key="lab_humid",
+                               label_visibility="collapsed")
+
+    st.markdown("---")
+
+    # ── 생장 모델 계산 ──
+    import math
+
+    def photosynthesis_rate(solar, temp, humid, crop):
+        """광합성 속도 모델 (0~100 상대값)"""
+        c = CROPS[crop]
+        # 일사량 효과: 광보상점~광포화점 사이 sigmoid
+        s_min, s_max = c["opt_solar"]
+        s_mid = (s_min + s_max) / 2
+        s_rate = 100 / (1 + math.exp(-0.008 * (solar - s_mid)))
+        # 포화 이후 광억제 (광포화점 초과 시 약간 감소)
+        if solar > s_max:
+            s_rate *= max(0.6, 1 - (solar - s_max) / (s_max * 2))
+
+        # 온도 효과: 최적 온도 중심 정규분포
+        t_opt = sum(c["opt_temp"]) / 2
+        t_rate = 100 * math.exp(-0.012 * (temp - t_opt) ** 2)
+
+        # 습도 효과: 기공 개폐 (최적 범위 내 최대)
+        h_min, h_max = c["opt_humid"]
+        h_opt = (h_min + h_max) / 2
+        h_half = (h_max - h_min) / 2
+        h_rate = 100 * math.exp(-0.003 * (humid - h_opt) ** 2)
+
+        # 리비히의 최소율: 가장 부족한 요소가 전체를 제한
+        limiting = min(s_rate, t_rate, h_rate)
+        combined = (s_rate * 0.45 + t_rate * 0.35 + h_rate * 0.20) * 0.6 + limiting * 0.4
+        return round(min(100, max(0, combined)), 1)
+
+    def transpiration_rate(temp, humid, solar):
+        """증산속도 모델 (0~100 상대값)"""
+        # 온도 높을수록, 습도 낮을수록, 일사량 많을수록 증산 증가
+        base = (temp / 45) * 50 + ((100 - humid) / 100) * 30 + (solar / 800) * 20
+        return round(min(100, max(0, base)), 1)
+
+    def growth_score(photo, transp, temp, humid, crop):
+        """종합 생장 점수"""
+        c = CROPS[crop]
+        # 증산이 너무 높으면 수분 스트레스
+        transp_penalty = max(0, (transp - 70) * 0.5)
+        # 저온/고온 스트레스
+        t_opt = sum(c["opt_temp"]) / 2
+        temp_stress = max(0, abs(temp - t_opt) - 5) * 2
+        score = photo - transp_penalty - temp_stress
+        return round(min(100, max(0, score)), 1)
+
+    # 현재 값 계산
+    photo  = photosynthesis_rate(lab_solar, lab_temp, lab_humid, lab_crop)
+    transp = transpiration_rate(lab_temp, lab_humid, lab_solar)
+    growth = growth_score(photo, transp, lab_temp, lab_humid, lab_crop)
+
+    # 광보상점/광포화점
+    comp_point = lc["opt_solar"][0] * 0.3   # 광보상점 추정
+    sat_point  = lc["opt_solar"][1]
+
+    # ── 결과 지표 ──
+    mc1, mc2, mc3 = st.columns(3)
+    indicators = [
+        ("🌿 광합성 속도", photo, "%", "#52B788"),
+        ("💦 증산 속도",   transp, "%", "#457B9D"),
+        ("📈 종합 생장 점수", growth, "점", "#2D6A4F"),
+    ]
+    for col, (label, val, unit, color) in zip([mc1, mc2, mc3], indicators):
+        with col:
+            bar_w = int(val)
+            st.markdown(f"""
+            <div class="metric-box" style="border-top-color:{color};">
+              <div class="metric-label">{label}</div>
+              <div class="metric-value" style="color:{color};">{val}</div>
+              <div class="metric-unit">{unit}</div>
+              <div style="background:#eee; border-radius:4px; height:6px; margin-top:10px;">
+                <div style="background:{color}; width:{bar_w}%; height:6px; border-radius:4px; transition:width 0.3s;"></div>
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ── 그래프 4개 ──
+    solar_range = list(range(0, 810, 10))
+    temp_range  = list(range(0, 46, 1))
+    humid_range = list(range(0, 101, 1))
+
+    # 광합성 속도 vs 일사량 (광반응 곡선)
+    photo_by_solar = [photosynthesis_rate(s, lab_temp, lab_humid, lab_crop) for s in solar_range]
+    fig_solar = go.Figure()
+    fig_solar.add_trace(go.Scatter(
+        x=solar_range, y=photo_by_solar,
+        mode="lines", name="광합성 속도",
+        line=dict(color="#52B788", width=2.5),
+        fill="tozeroy", fillcolor="rgba(82,183,136,0.08)"
+    ))
+    fig_solar.add_vline(x=lab_solar, line_dash="dash", line_color="#F4A261", line_width=2,
+                        annotation_text=f"현재 {lab_solar} W/m²", annotation_font_size=11)
+    fig_solar.add_vline(x=comp_point, line_dash="dot", line_color="#aaa", line_width=1,
+                        annotation_text="광보상점", annotation_position="bottom right",
+                        annotation_font_size=10)
+    fig_solar.add_vline(x=sat_point, line_dash="dot", line_color="#888", line_width=1,
+                        annotation_text="광포화점", annotation_position="bottom right",
+                        annotation_font_size=10)
+    fig_solar.update_layout(
+        title=dict(text="☀️ 일사량 vs 광합성 속도", font=dict(size=14, color="#1B2D24")),
+        xaxis_title="일사량 (W/m²)", yaxis_title="광합성 속도 (%)",
+        yaxis=dict(range=[0, 110]),
+        height=260, paper_bgcolor="white", plot_bgcolor="#FAFAFA",
+        margin=dict(l=40, r=20, t=45, b=40),
+        showlegend=False,
+    )
+
+    # 광합성 속도 vs 온도
+    photo_by_temp = [photosynthesis_rate(lab_solar, t, lab_humid, lab_crop) for t in temp_range]
+    fig_temp_lab = go.Figure()
+    fig_temp_lab.add_trace(go.Scatter(
+        x=temp_range, y=photo_by_temp,
+        mode="lines", name="광합성 속도",
+        line=dict(color="#E76F51", width=2.5),
+        fill="tozeroy", fillcolor="rgba(231,111,81,0.07)"
+    ))
+    fig_temp_lab.add_vrect(
+        x0=lc["opt_temp"][0], x1=lc["opt_temp"][1],
+        fillcolor="rgba(82,183,136,0.12)", line_width=0,
+        annotation_text="최적 온도", annotation_font_size=10,
+    )
+    fig_temp_lab.add_vline(x=lab_temp, line_dash="dash", line_color="#F4A261", line_width=2,
+                           annotation_text=f"현재 {lab_temp}°C", annotation_font_size=11)
+    fig_temp_lab.update_layout(
+        title=dict(text="🌡️ 온도 vs 광합성 속도", font=dict(size=14, color="#1B2D24")),
+        xaxis_title="온도 (°C)", yaxis_title="광합성 속도 (%)",
+        yaxis=dict(range=[0, 110]),
+        height=260, paper_bgcolor="white", plot_bgcolor="#FAFAFA",
+        margin=dict(l=40, r=20, t=45, b=40),
+        showlegend=False,
+    )
+
+    # 증산속도 vs 온도
+    transp_by_temp = [transpiration_rate(t, lab_humid, lab_solar) for t in temp_range]
+    fig_transp = go.Figure()
+    fig_transp.add_trace(go.Scatter(
+        x=temp_range, y=transp_by_temp,
+        mode="lines", name="증산 속도",
+        line=dict(color="#457B9D", width=2.5),
+        fill="tozeroy", fillcolor="rgba(69,123,157,0.07)"
+    ))
+    fig_transp.add_vline(x=lab_temp, line_dash="dash", line_color="#F4A261", line_width=2,
+                         annotation_text=f"현재 {lab_temp}°C", annotation_font_size=11)
+    fig_transp.update_layout(
+        title=dict(text="💧 온도 vs 증산 속도", font=dict(size=14, color="#1B2D24")),
+        xaxis_title="온도 (°C)", yaxis_title="증산 속도 (%)",
+        yaxis=dict(range=[0, 110]),
+        height=260, paper_bgcolor="white", plot_bgcolor="#FAFAFA",
+        margin=dict(l=40, r=20, t=45, b=40),
+        showlegend=False,
+    )
+
+    # 광합성 vs 증산 (현재 조건 점 표시)
+    fig_pt = go.Figure()
+    # 온도 변화에 따른 광합성·증산 궤적
+    photo_traj  = [photosynthesis_rate(lab_solar, t, lab_humid, lab_crop) for t in temp_range]
+    transp_traj = [transpiration_rate(t, lab_humid, lab_solar) for t in temp_range]
+    fig_pt.add_trace(go.Scatter(
+        x=transp_traj, y=photo_traj,
+        mode="lines",
+        line=dict(color=COLORS["neutral"], width=1.5),
+        name="온도 변화 궤적",
+        hovertemplate="온도: %{text}°C<br>증산: %{x:.0f}%<br>광합성: %{y:.0f}%",
+        text=[str(t) for t in temp_range],
+    ))
+    fig_pt.add_trace(go.Scatter(
+        x=[transp], y=[photo],
+        mode="markers",
+        marker=dict(size=14, color=COLORS["accent"], symbol="star",
+                    line=dict(color="white", width=2)),
+        name="현재 조건",
+    ))
+    # 이상 구역 표시
+    fig_pt.add_shape(type="rect", x0=0, x1=40, y0=60, y1=110,
+                     fillcolor="rgba(82,183,136,0.08)", line_width=0)
+    fig_pt.add_annotation(x=20, y=105, text="✅ 이상 구역", showarrow=False,
+                          font=dict(size=10, color="#2D6A4F"))
+    fig_pt.update_layout(
+        title=dict(text="🔬 광합성 vs 증산 관계 (온도 변화)", font=dict(size=14, color="#1B2D24")),
+        xaxis_title="증산 속도 (%)", yaxis_title="광합성 속도 (%)",
+        xaxis=dict(range=[0, 100]), yaxis=dict(range=[0, 110]),
+        height=260, paper_bgcolor="white", plot_bgcolor="#FAFAFA",
+        margin=dict(l=40, r=20, t=45, b=40),
+        legend=dict(orientation="h", y=1.15, font=dict(size=11)),
+    )
+
+    g1, g2 = st.columns(2)
+    with g1:
+        st.plotly_chart(fig_solar, use_container_width=True)
+        st.plotly_chart(fig_transp, use_container_width=True)
+    with g2:
+        st.plotly_chart(fig_temp_lab, use_container_width=True)
+        st.plotly_chart(fig_pt, use_container_width=True)
+
+    # ── 피드백 텍스트 ──
+    st.markdown("---")
+    st.markdown("#### 🔍 현재 조건 분석")
+
+    feedbacks = []
+
+    # 일사량 판단
+    s_min, s_max = lc["opt_solar"]
+    if lab_solar < s_min * 0.3:
+        feedbacks.append(("warning", f"⚠️ 일사량 부족 ({lab_solar} W/m²): 광보상점에 미치지 못해 광합성보다 호흡이 우세합니다. LED 보광이 필요합니다."))
+    elif lab_solar < s_min:
+        feedbacks.append(("warning", f"⚠️ 일사량 낮음 ({lab_solar} W/m²): 광합성은 가능하지만 최적 범위({s_min}~{s_max} W/m²)보다 낮습니다."))
+    elif lab_solar <= s_max:
+        feedbacks.append(("info", f"✅ 일사량 적정 ({lab_solar} W/m²): {lab_crop}의 최적 광합성 범위 내에 있습니다."))
+    else:
+        feedbacks.append(("warning", f"⚠️ 일사량 과다 ({lab_solar} W/m²): 광포화점({s_max} W/m²)을 초과하여 광억제가 발생할 수 있습니다."))
+
+    # 온도 판단
+    t_min, t_max = lc["opt_temp"]
+    if lab_temp < t_min - 5:
+        feedbacks.append(("warning", f"⚠️ 저온 스트레스 ({lab_temp}°C): 효소 활성이 크게 저하되어 생장이 거의 멈춥니다."))
+    elif lab_temp < t_min:
+        feedbacks.append(("warning", f"⚠️ 온도 낮음 ({lab_temp}°C): 최적 온도({t_min}~{t_max}°C)보다 낮아 광합성 효율이 떨어집니다."))
+    elif lab_temp <= t_max:
+        feedbacks.append(("info", f"✅ 온도 적정 ({lab_temp}°C): {lab_crop}의 최적 온도 범위 내입니다."))
+    elif lab_temp < t_max + 5:
+        feedbacks.append(("warning", f"⚠️ 온도 높음 ({lab_temp}°C): 최적 범위를 벗어나 호흡 소모가 증가합니다."))
+    else:
+        feedbacks.append(("warning", f"⚠️ 고온 스트레스 ({lab_temp}°C): 효소 변성이 일어나 광합성이 급격히 감소합니다."))
+
+    # 습도 판단
+    h_min, h_max = lc["opt_humid"]
+    if lab_humid < h_min - 10:
+        feedbacks.append(("warning", f"⚠️ 습도 매우 낮음 ({lab_humid}%): 기공이 닫혀 CO₂ 공급이 차단되고 증산 스트레스가 심합니다."))
+    elif lab_humid < h_min:
+        feedbacks.append(("warning", f"⚠️ 습도 낮음 ({lab_humid}%): 증산이 과다하여 수분 손실이 클 수 있습니다."))
+    elif lab_humid <= h_max:
+        feedbacks.append(("info", f"✅ 습도 적정 ({lab_humid}%): 기공이 열려 CO₂ 흡수와 수분 균형이 좋습니다."))
+    else:
+        feedbacks.append(("warning", f"⚠️ 습도 과다 ({lab_humid}%): 곰팡이·병해 위험이 높아지고 증산이 억제됩니다."))
+
+    # 종합 생장 점수 판단
+    if growth >= 80:
+        feedbacks.append(("info", f"🌟 종합 생장 점수 {growth}점: 매우 좋은 조건입니다! 이 환경을 유지하면 최적 생장을 기대할 수 있습니다."))
+    elif growth >= 60:
+        feedbacks.append(("info", f"📊 종합 생장 점수 {growth}점: 양호한 조건입니다. 위의 경고 항목을 보완하면 더 높아집니다."))
+    else:
+        feedbacks.append(("warning", f"📉 종합 생장 점수 {growth}점: 개선이 필요합니다. 경고 항목을 먼저 수정하세요."))
+
+    fb_col1, fb_col2 = st.columns(2)
+    for i, (ftype, ftext) in enumerate(feedbacks):
+        col = fb_col1 if i % 2 == 0 else fb_col2
+        with col:
+            css_class = "info-block" if ftype == "info" else "warning-block"
+            st.markdown(f'<div class="{css_class}">{ftext}</div>', unsafe_allow_html=True)
+
+    # ── 탐구 질문 ──
+    st.markdown("---")
+    st.markdown("""
+    <div class="card" style="border-left-color:#F4A261;">
+      <div class="card-title">💬 탐구 질문</div>
+      <div style="font-size:14px; line-height:2.4; color:#333;">
+        1. 일사량을 계속 높이면 광합성 속도도 계속 증가할까? 왜 그렇지 않을까? <span class="tag-bio">생명과학</span><br>
+        2. 같은 온도에서도 습도에 따라 생장 점수가 달라지는 이유는? <span class="tag-bio">생명과학</span><br>
+        3. 광합성 속도와 증산 속도 그래프에서 최적 온도가 다른 이유는 무엇일까? <span class="tag-physics">물리</span><br>
+        4. 세 변수 중 어느 것이 현재 작물 생장을 가장 크게 제한하고 있는가? <span class="tag-math">수학</span>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ════════════════════════════════════════════════════════
