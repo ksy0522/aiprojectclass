@@ -284,38 +284,38 @@ def fetch_openmeteo(lat, lon):
     except Exception as e:
         return None
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=86400, show_spinner=False)
 def fetch_nasa_power(lat, lon):
-    """NASA POWER API: 월평균 일사량"""
-    end   = datetime.now()
-    start = end - timedelta(days=365)
+    """NASA POWER API: 월별 기후 평균 일사량 (climatology 엔드포인트 사용)
+    - climatology: 장기 월 평균값 제공, 지역별로 정확히 다른 값 반환
+    - 키 형식: "JAN","FEB",...,"DEC" → 1~12월로 변환
+    """
     url = (
-        f"https://power.larc.nasa.gov/api/temporal/monthly/point"
+        f"https://power.larc.nasa.gov/api/temporal/climatology/point"
         f"?parameters=ALLSKY_SFC_SW_DWN"
         f"&community=AG"
         f"&longitude={lon}&latitude={lat}"
-        f"&start={start.strftime('%Y%m')}&end={end.strftime('%Y%m')}"
         f"&format=JSON"
     )
+    MONTH_MAP = {
+        "JAN":1,"FEB":2,"MAR":3,"APR":4,"MAY":5,"JUN":6,
+        "JUL":7,"AUG":8,"SEP":9,"OCT":10,"NOV":11,"DEC":12
+    }
     try:
-        r = requests.get(url, timeout=20)
+        r = requests.get(url, timeout=25)
+        r.raise_for_status()
         data = r.json()
         values = data["properties"]["parameter"]["ALLSKY_SFC_SW_DWN"]
         months, solar = [], []
         for k, v in values.items():
-            try:
-                month = int(k[-2:])
-                if 1 <= month <= 12 and v != -999:
-                    months.append(month)
-                    solar.append(v)
-            except:
-                pass
-        if not months:
+            if k in MONTH_MAP and v not in (-999, -999.0):
+                months.append(MONTH_MAP[k])
+                solar.append(float(v))
+        if len(months) < 12:
             return None
         solar_df = pd.DataFrame({"month": months, "solar": solar})
-        solar_monthly = solar_df.groupby("month")["solar"].mean().reset_index()
-        return solar_monthly
-    except Exception as e:
+        return solar_df.sort_values("month").reset_index(drop=True)
+    except Exception:
         return None
 
 def get_region_data(region):
@@ -323,18 +323,48 @@ def get_region_data(region):
     with st.spinner(f"🌐 {region} 기상 데이터 수집 중..."):
         meteo = fetch_openmeteo(lat, lon)
         nasa  = fetch_nasa_power(lat, lon)
-    return meteo, nasa
+    return meteo, nasa, lat
 
-def build_monthly_df(meteo, nasa):
+# 지역별 월 평균 일사량 fallback (기상청·NASA POWER 자료 기반 추정값, MJ/m²/day)
+SOLAR_FALLBACK = {
+    # 위도 33~34 (제주권): 일사량 가장 많음
+    (33.0, 34.5): [3.0,3.8,4.8,5.8,6.2,5.8,5.0,5.5,4.8,4.0,3.1,2.7],
+    # 위도 34.5~36 (광주·전주권)
+    (34.5, 36.0): [2.8,3.5,4.5,5.5,6.0,5.5,4.7,5.2,4.5,3.7,2.9,2.5],
+    # 위도 36~37 (대전·청주권)
+    (36.0, 37.0): [2.6,3.3,4.3,5.2,5.8,5.3,4.5,5.0,4.3,3.5,2.7,2.3],
+    # 위도 37~38 (서울·수원·강릉권)
+    (37.0, 38.5): [2.4,3.1,4.1,5.0,5.6,5.1,4.3,4.8,4.1,3.3,2.5,2.1],
+    # 위도 38.5 이상 (북부)
+    (38.5, 40.0): [2.2,2.9,3.9,4.8,5.4,4.9,4.1,4.6,3.9,3.1,2.3,1.9],
+}
+
+def _get_solar_fallback(lat):
+    """위도에 맞는 fallback 일사량 리스트 반환"""
+    for (lo, hi), vals in SOLAR_FALLBACK.items():
+        if lo <= lat < hi:
+            return vals
+    # 범위 밖이면 가장 가까운 것 선택
+    return SOLAR_FALLBACK[(37.0, 38.5)]
+
+def build_monthly_df(meteo, nasa, lat=37.0):
     """기상·일사량 병합 DataFrame (12개월)"""
     if meteo is None:
         return None
     df = meteo.copy()
     if nasa is not None:
-        df = df.merge(nasa, on="month", how="left")
+        merged = df.merge(nasa, on="month", how="left")
+        # NASA 데이터가 merge 후 일부 NaN이면 fallback으로 채움
+        if merged["solar"].isna().any():
+            fb = _get_solar_fallback(lat)
+            merged["solar"] = merged.apply(
+                lambda row: fb[int(row["month"])-1] if pd.isna(row["solar"]) else row["solar"],
+                axis=1
+            )
+        df = merged
     else:
-        # fallback: 위도 기반 추정치
-        df["solar"] = [2.5,3.2,4.1,5.0,5.8,5.5,4.8,5.2,4.5,3.8,2.8,2.3][:len(df)]
+        fb = _get_solar_fallback(lat)
+        df["solar"] = [fb[int(m)-1] for m in df["month"]]
     df["month_kr"] = df["month"].apply(lambda m: MONTHS_KR[m-1])
     return df
 
@@ -571,8 +601,8 @@ if st.session_state.get("run_analysis") and "region_data_cache" not in st.sessio
     load_crop    = st.session_state.get("analysis_crop", selected_crop)
     cache = {}
     for r in load_regions:
-        meteo, nasa = get_region_data(r)
-        df = build_monthly_df(meteo, nasa)
+        meteo, nasa, lat_r = get_region_data(r)
+        df = build_monthly_df(meteo, nasa, lat=lat_r)
         if df is not None:
             df = calc_suitability(df, load_crop)
             df = calc_led_supplement(df, load_crop)
@@ -1597,62 +1627,184 @@ with tab4:
         </div>
         """, unsafe_allow_html=True)
 
-        # ── 최종 결론 공개 (선택) ────────────────────────────────────
-        if st.button("🔍 다른 모둠과 비교해보기 — 전체 지역 순위 공개", key="reveal_btn"):
-            st.session_state["reveal"] = True
+        # ── 최종 결론 공개 ───────────────────────────────────────────
+        reveal_col1, reveal_col2 = st.columns(2)
+        with reveal_col1:
+            if st.button("🔍 내 가중치 기준 순위 공개", key="reveal_btn"):
+                st.session_state["reveal_my"] = True
+        with reveal_col2:
+            if st.button("🌍 절대적 적합도 기준 정답 공개", key="reveal_abs_btn"):
+                st.session_state["reveal_abs"] = True
 
-        if st.session_state.get("reveal"):
+        # ── 내 가중치 기준 순위 ──
+        if st.session_state.get("reveal_my"):
             scored_sorted = sorted(scored, key=lambda x: x["my_score"], reverse=True)
-            best = scored_sorted[0]
+            best_my = scored_sorted[0]
+            wt, ws, wh = st.session_state.get("weights", (0.4, 0.35, 0.25))
+
             st.markdown(f"""
             <div style="background:linear-gradient(135deg,#2D6A4F,#52B788);
-                        border-radius:14px; padding:24px 28px; margin:16px 0;
+                        border-radius:14px; padding:22px 28px; margin:12px 0;
                         color:white; text-align:center;">
               <div style="font-size:11px; letter-spacing:2px; opacity:0.8; margin-bottom:4px;">
-                내 가중치 기준 최고 점수 지역
+                📐 내 가중치 기준 (기온 {int(wt*100)}% · 일사량 {int(ws*100)}% · 습도 {int(wh*100)}%)
               </div>
-              <div style="font-size:32px; font-weight:900;">📍 {best['region']}</div>
-              <div style="font-size:42px; font-weight:700;">{best['my_score']}점</div>
+              <div style="font-size:28px; font-weight:900;">📍 {best_my['region']}</div>
+              <div style="font-size:38px; font-weight:700;">{best_my['my_score']}점</div>
               <div style="font-size:12px; opacity:0.85; margin-top:4px;">
-                기온 {best['temp_s']}점 · 일사량 {best['solar_s']}점 · 습도 {best['humid_s']}점
+                기온 {best_my['temp_s']}점 · 일사량 {best_my['solar_s']}점 · 습도 {best_my['humid_s']}점
               </div>
             </div>
             """, unsafe_allow_html=True)
 
-            # 전체 순위 바 차트
-            fig_reveal = go.Figure(go.Bar(
+            fig_my = go.Figure(go.Bar(
                 x=[s["my_score"] for s in scored_sorted],
                 y=[s["region"] for s in scored_sorted],
                 orientation="h",
-                marker=dict(
-                    color=[s["my_score"] for s in scored_sorted],
-                    colorscale=[[0,"#F4A261"],[0.5,"#52B788"],[1,"#2D6A4F"]],
-                ),
+                marker=dict(color=[s["my_score"] for s in scored_sorted],
+                            colorscale=[[0,"#F4A261"],[0.5,"#52B788"],[1,"#2D6A4F"]]),
                 text=[f"{s['my_score']}점" for s in scored_sorted],
                 textposition="outside",
             ))
-            fig_reveal.update_layout(
-                title="내 가중치 기준 지역별 종합 점수",
-                xaxis=dict(range=[0, 110]),
-                height=max(180, len(scored)*80),
+            fig_my.update_layout(
+                title=f"내 가중치 기준 순위",
+                xaxis=dict(range=[0,110]), height=max(160, len(scored)*75),
                 paper_bgcolor="white", plot_bgcolor="#FAFAFA",
                 margin=dict(l=20, r=60, t=40, b=20),
             )
-            st.plotly_chart(fig_reveal, use_container_width=True)
+            st.plotly_chart(fig_my, use_container_width=True)
 
             if final_pick != "(선택하세요)":
                 my_pick_score = next((s["my_score"] for s in scored if s["region"] == final_pick), None)
-                best_score = scored_sorted[0]["my_score"]
                 if final_pick == scored_sorted[0]["region"]:
-                    st.markdown(f"""
-                    <div class="info-block">
-                      🎯 우리 모둠의 선택 <b>{final_pick}</b>이 내 가중치 기준으로도 최고 점수입니다!
-                      데이터 분석과 직관이 일치했네요.
+                    st.markdown(f"""<div class="info-block">
+                      🎯 우리 모둠의 선택 <b>{final_pick}</b>이 내 가중치 기준으로도 1위입니다!
+                      가설과 분석이 일치했어요.
                     </div>""", unsafe_allow_html=True)
                 else:
-                    st.markdown(f"""
-                    <div class="warning-block">
-                      🤔 우리 모둠은 <b>{final_pick}({my_pick_score}점)</b>을 선택했지만,
-                      내 가중치 기준 최고 점수는 <b>{scored_sorted[0]['region']}({best_score}점)</b>입니다.
-                      왜 차이가 생겼는지 토론해보세요.
+                    st.markdown(f"""<div class="warning-block">
+                      🤔 우리 모둠은 <b>{final_pick} ({my_pick_score}점)</b>을 선택했지만,
+                      내 가중치 기준 1위는 <b>{scored_sorted[0]['region']} ({scored_sorted[0]['my_score']}점)</b>입니다.
+                      가중치 설정이 달랐다면 결론도 달라졌을까요?
                     </div>""", unsafe_allow_html=True)
+
+        # ── 절대적 적합도 기준 정답 ──
+        if st.session_state.get("reveal_abs"):
+            # 절대 적합도: calc_suitability의 고정 가중치(기온40·일사량35·습도25) + 에너지 비용 반영
+            abs_scored = []
+            for region, df in region_data.items():
+                h, c = calc_energy(df, display_crop, display_area)
+                abs_grow  = df["total_score"].mean()          # 고정 가중치 기반 생장 점수
+                abs_led   = 100 - df["led_need"].mean()       # LED 보광 불필요 점수
+                max_cost  = max(sum(calc_energy(d, display_crop, display_area)) for d in region_data.values())
+                abs_cost  = max(0, 100 - ((h+c) / (max_cost+1)) * 60)
+                abs_total = round(abs_grow * 0.50 + abs_led * 0.30 + abs_cost * 0.20, 1)
+                abs_scored.append({
+                    "region": region,
+                    "생장 점수": round(abs_grow, 1),
+                    "보광 효율": round(abs_led, 1),
+                    "비용 효율": round(abs_cost, 1),
+                    "절대 적합도": abs_total,
+                    "heating": h, "cooling": c,
+                })
+            abs_scored.sort(key=lambda x: x["절대 적합도"], reverse=True)
+            abs_best = abs_scored[0]
+
+            st.markdown(f"""
+            <div style="background:linear-gradient(135deg,#1B2D24,#2D6A4F);
+                        border-radius:14px; padding:22px 28px; margin:12px 0;
+                        color:white; text-align:center;">
+              <div style="font-size:11px; letter-spacing:2px; opacity:0.7; margin-bottom:4px;">
+                🌍 절대적 스마트팜 적합도 (생장 50% · 보광효율 30% · 비용효율 20%)
+              </div>
+              <div style="font-size:28px; font-weight:900;">📍 {abs_best['region']}</div>
+              <div style="font-size:38px; font-weight:700;">{abs_best['절대 적합도']}점</div>
+              <div style="font-size:12px; opacity:0.85; margin-top:4px;">
+                생장 적합도 {abs_best['생장 점수']}점 · 보광 효율 {abs_best['보광 효율']}점 · 비용 효율 {abs_best['비용 효율']}점
+              </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # 절대 적합도 기준 상세 비교 차트
+            fig_abs = make_subplots(rows=1, cols=2,
+                subplot_titles=["절대 적합도 종합 순위", "항목별 점수 비교"],
+                horizontal_spacing=0.12)
+
+            region_colors_local = ["#2D6A4F", "#F4A261", "#457B9D"]
+            fig_abs.add_trace(go.Bar(
+                x=[s["절대 적합도"] for s in abs_scored],
+                y=[s["region"] for s in abs_scored],
+                orientation="h",
+                marker=dict(color=[s["절대 적합도"] for s in abs_scored],
+                            colorscale=[[0,"#F4A261"],[0.5,"#52B788"],[1,"#1B2D24"]]),
+                text=[f"{s['절대 적합도']}점" for s in abs_scored],
+                textposition="outside",
+                showlegend=False,
+            ), row=1, col=1)
+
+            cats = ["생장 점수", "보광 효율", "비용 효율"]
+            for i, s in enumerate(abs_scored):
+                fig_abs.add_trace(go.Bar(
+                    name=s["region"],
+                    x=cats,
+                    y=[s["생장 점수"], s["보광 효율"], s["비용 효율"]],
+                    marker_color=region_colors_local[i % 3],
+                    text=[f"{v:.0f}" for v in [s["생장 점수"], s["보광 효율"], s["비용 효율"]]],
+                    textposition="outside",
+                ), row=1, col=2)
+
+            fig_abs.update_layout(
+                height=300, paper_bgcolor="white", plot_bgcolor="#FAFAFA",
+                barmode="group", legend=dict(orientation="h", y=1.15),
+                margin=dict(l=20, r=40, t=45, b=20),
+            )
+            fig_abs.update_xaxes(range=[0, 115], row=1, col=1)
+            fig_abs.update_xaxes(range=[0, 115], row=1, col=2)  # 수정: col=2
+            st.plotly_chart(fig_abs, use_container_width=True)
+
+            # 내 선택 vs 절대 정답 비교
+            if final_pick != "(선택하세요)":
+                abs_pick_score = next((s["절대 적합도"] for s in abs_scored if s["region"] == final_pick), None)
+                if final_pick == abs_best["region"]:
+                    st.markdown(f"""<div class="info-block">
+                      🏆 우리 모둠의 선택 <b>{final_pick}</b>이 절대적 적합도 기준으로도 최적 입지입니다!
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    st.markdown(f"""<div class="warning-block">
+                      🤔 절대적 기준 최적 입지는 <b>{abs_best['region']} ({abs_best['절대 적합도']}점)</b>이지만,
+                      우리 모둠은 <b>{final_pick} ({abs_pick_score}점)</b>을 선택했습니다.
+                    </div>""", unsafe_allow_html=True)
+
+            # 내 가중치 vs 절대 순위 비교 인사이트
+            if st.session_state.get("reveal_my") and st.session_state.get("reveal_abs"):
+                my_sorted  = sorted(scored, key=lambda x: x["my_score"], reverse=True)
+                abs_rank   = {s["region"]: i+1 for i, s in enumerate(abs_scored)}
+                my_rank    = {s["region"]: i+1 for i, s in enumerate(my_sorted)}
+
+                st.markdown("---")
+                st.markdown("""
+                <div class="card" style="border-left-color:#F4A261;">
+                  <div class="card-title">🔬 심화 분석 · 내 가중치 vs 절대 기준 비교</div>
+                """, unsafe_allow_html=True)
+                diff_found = False
+                for region in region_data.keys():
+                    m_r = my_rank.get(region, "-")
+                    a_r = abs_rank.get(region, "-")
+                    if m_r != a_r:
+                        diff_found = True
+                        st.markdown(f"""
+                        <div style="font-size:13px; padding:6px 0; border-bottom:1px solid #eee;">
+                          📍 <b>{region}</b>: 내 가중치 순위 <b>{m_r}위</b> →
+                          절대 기준 순위 <b>{a_r}위</b>
+                          <span style="color:#888; font-size:12px;"> — 순위가 달라졌어요!</span>
+                        </div>""", unsafe_allow_html=True)
+                if not diff_found:
+                    st.markdown("""<div class="info-block">
+                      두 기준의 순위가 일치합니다! 내 가중치가 객관적 판단과 유사했어요.
+                    </div>""", unsafe_allow_html=True)
+                st.markdown("""
+                  <div style="font-size:13px; color:#555; margin-top:10px; line-height:1.8;">
+                    💡 순위 차이가 생긴 이유는 무엇일까요?<br>
+                    내 가중치에서 상대적으로 낮게 설정한 요소가 실제로는 더 중요했던 것은 아닐까요?
+                  </div>
+                </div>""", unsafe_allow_html=True)
