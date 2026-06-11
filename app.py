@@ -1044,22 +1044,17 @@ with tab2:
             """, unsafe_allow_html=True)
 
 
+
+
 # ════════════════════════════════════════════════════════
-# TAB 3 — 최적화 설계 (자기주도 탐구형)
+# TAB 3 — 최적화 설계 (자기주도 탐구형 v2)
 # ════════════════════════════════════════════════════════
 with tab3:
     st.markdown("""
     <div class="step-badge">⚡ 3차시 · 스마트팜 최적화 설계</div>
     <div style="font-size:13px; color:#555; margin-bottom:4px;">
-      <span class="tag-math">수학</span>&nbsp;<span class="tag-physics">물리</span>&nbsp;
-      가설 설정 → 가중치 직접 결정 → 항목별 데이터 탐색 → 결과 확인
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="info-block" style="margin-bottom:20px;">
-      💡 이 탭은 <b>3단계</b>로 진행합니다.
-      각 단계를 순서대로 완료한 후 다음 단계를 열어보세요.
+      <span class="tag-math">수학</span>&nbsp;<span class="tag-physics">물리</span>&nbsp;<span class="tag-bio">생명과학</span>&nbsp;
+      가중치 설정 → 가설 수립 → 데이터 탐색 → 결과 확인
     </div>
     """, unsafe_allow_html=True)
 
@@ -1067,402 +1062,363 @@ with tab3:
         st.info("👈 사이드바에서 지역을 선택하고 **분석 시작**을 누르세요.")
     else:
         region_list = list(region_data.keys())
+        region_colors = ["#2D6A4F", "#F4A261", "#457B9D"]
+        crop_info = CROPS[display_crop]
 
-        # ══ STEP 1: 가설 설정 ══════════════════════════════════════════
-        with st.expander("📝 STEP 1 · 가설 설정  (먼저 작성하세요)", expanded=True):
-            st.markdown("""
+        # ══════════════════════════════════════════════════════
+        # STEP 1: 가중치 설정 (가장 먼저)
+        # ══════════════════════════════════════════════════════
+        with st.expander("⚖️ STEP 1 · 가중치 설정", expanded=True):
+            st.markdown(f"""
             <div class="card" style="border-left-color:#F4A261;">
-              <div class="card-title">🔍 탐구 전 가설을 먼저 세워보세요</div>
-              <div style="font-size:13px; color:#555; line-height:1.8;">
-                데이터를 보기 전에 스스로 예측해보는 것이 중요합니다.<br>
-                아래 질문에 답하고 STEP 2로 넘어가세요.
+              <div class="card-title">⚖️ 어떤 환경 요소가 가장 중요할까요?</div>
+              <div style="font-size:13px; color:#555; line-height:2.0;">
+                스마트팜 입지를 결정할 때 아래 세 요소 중 무엇이 가장 중요한지 모둠에서 토론하세요.<br>
+                <b>세 가중치의 합이 100이 되도록</b> 슬라이더를 조절하세요.
+              </div>
+              <table style="width:100%; font-size:12px; margin-top:12px; border-collapse:collapse;">
+                <tr style="background:#f8f8f8;">
+                  <th style="padding:8px; text-align:left;">요소</th>
+                  <th style="padding:8px; text-align:left;">식물 생장과의 관계</th>
+                  <th style="padding:8px; text-align:left;">{display_crop} 최적 범위</th>
+                </tr>
+                <tr style="border-bottom:1px solid #eee;">
+                  <td style="padding:8px;"><span class="tag-physics">물리</span> 🌡️ 기온</td>
+                  <td style="padding:8px; color:#555;">효소 활성 조절 → 광합성·호흡 속도 결정<br>벗어나면 난방/냉방 비용 발생</td>
+                  <td style="padding:8px; font-weight:700;">{crop_info['opt_temp'][0]}~{crop_info['opt_temp'][1]}°C</td>
+                </tr>
+                <tr style="border-bottom:1px solid #eee;">
+                  <td style="padding:8px;"><span class="tag-physics">물리</span> ☀️ 일사량</td>
+                  <td style="padding:8px; color:#555;">빛 에너지 → 광합성 ATP·NADPH 생성<br>부족하면 LED 보광 비용 발생</td>
+                  <td style="padding:8px; font-weight:700;">{crop_info['opt_solar'][0]}~{crop_info['opt_solar'][1]} W/m²</td>
+                </tr>
+                <tr>
+                  <td style="padding:8px;"><span class="tag-bio">생명과학</span> 💧 습도</td>
+                  <td style="padding:8px; color:#555;">기공 개폐 → CO₂ 흡수·증산작용 조절<br>과다 시 병해, 부족 시 수분 스트레스</td>
+                  <td style="padding:8px; font-weight:700;">{crop_info['opt_humid'][0]}~{crop_info['opt_humid'][1]}%</td>
+                </tr>
+              </table>
+            </div>
+            """, unsafe_allow_html=True)
+
+            wc1, wc2, wc3 = st.columns(3)
+            with wc1:
+                st.markdown("<div style='text-align:center; font-weight:700; color:#E76F51; margin-bottom:4px;'>🌡️ 기온 가중치</div>", unsafe_allow_html=True)
+                w_temp = st.slider("기온", 0, 100, 40, 5, key="w_temp", label_visibility="collapsed")
+            with wc2:
+                st.markdown("<div style='text-align:center; font-weight:700; color:#F4A261; margin-bottom:4px;'>☀️ 일사량 가중치</div>", unsafe_allow_html=True)
+                w_solar = st.slider("일사량", 0, 100, 35, 5, key="w_solar", label_visibility="collapsed")
+            with wc3:
+                st.markdown("<div style='text-align:center; font-weight:700; color:#457B9D; margin-bottom:4px;'>💧 습도 가중치</div>", unsafe_allow_html=True)
+                w_humid = st.slider("습도", 0, 100, 25, 5, key="w_humid", label_visibility="collapsed")
+
+            total_w = w_temp + w_solar + w_humid
+
+            # 가중치 합계 시각적 게이지
+            bar_color = "#52B788" if total_w == 100 else ("#E76F51" if total_w > 100 else "#F4A261")
+            fill_pct = min(100, total_w)
+            st.markdown(f"""
+            <div style="margin: 12px 0 4px;">
+              <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
+                <span style="font-weight:700;">합계: <span style="color:{bar_color}; font-size:16px;">{total_w}</span> / 100</span>
+                <span style="color:#999;">{'✅ 완료!' if total_w==100 else ('▼ %d 줄이세요' % (total_w-100) if total_w>100 else '▲ %d 더 추가하세요' % (100-total_w))}</span>
+              </div>
+              <div style="background:#eee; border-radius:6px; height:10px;">
+                <div style="background:{bar_color}; width:{fill_pct}%; height:10px; border-radius:6px; transition:width 0.3s;"></div>
               </div>
             </div>
             """, unsafe_allow_html=True)
 
-            col_h1, col_h2 = st.columns(2)
-            with col_h1:
-                hypothesis_best = st.selectbox(
-                    "❓ 어느 지역이 스마트팜에 가장 적합할 것 같나요?",
+            if total_w == 100:
+                st.session_state["weights"] = (w_temp/100, w_solar/100, w_humid/100)
+                st.session_state["weights_set"] = True
+
+                # 가중치 1위 요소 강조
+                top_factor = max([("기온", w_temp), ("일사량", w_solar), ("습도", w_humid)], key=lambda x: x[1])
+                st.markdown(f"""
+                <div class="info-block" style="margin-top:10px;">
+                  ✅ 설정 완료! 우리 모둠이 가장 중요하게 본 요소:
+                  <b style="font-size:16px;">{top_factor[0]} ({top_factor[1]}%)</b><br>
+                  이 선택을 바탕으로 아래 STEP 2에서 가설을 작성하세요.
+                </div>
+                """, unsafe_allow_html=True)
+
+                w_reason = st.text_area(
+                    "📝 이 가중치를 선택한 이유 (모둠 토론 후 기록)",
+                    placeholder=f"예) {top_factor[0]}을 가장 중요하게 본 이유는...",
+                    height=72, key="w_reason"
+                )
+            else:
+                st.session_state["weights_set"] = False
+                st.markdown("""
+                <div class="warning-block">
+                  ⚠️ 합계가 100이 되어야 다음 단계로 진행할 수 있습니다.
+                </div>""", unsafe_allow_html=True)
+
+        # ══════════════════════════════════════════════════════
+        # STEP 2: 가설 수립 (가중치 기반으로 유도)
+        # ══════════════════════════════════════════════════════
+        weights_set = st.session_state.get("weights_set", False)
+
+        with st.expander(
+            "📝 STEP 2 · 가설 수립" + (" ✅" if weights_set else " 🔒 STEP 1 완료 후 진행"),
+            expanded=False
+        ):
+            if not weights_set:
+                st.markdown('<div class="warning-block">🔒 STEP 1에서 가중치 합계를 100으로 맞춰주세요.</div>', unsafe_allow_html=True)
+            else:
+                wt, ws, wh = st.session_state.get("weights", (0.4, 0.35, 0.25))
+                top_w = max([("기온", wt), ("일사량", ws), ("습도", wh)], key=lambda x: x[1])
+                top_name = top_w[0]
+                top_emoji = {"기온": "🌡️", "일사량": "☀️", "습도": "💧"}[top_name]
+                top_opt = {
+                    "기온":   f"{crop_info['opt_temp'][0]}~{crop_info['opt_temp'][1]}°C",
+                    "일사량": f"{crop_info['opt_solar'][0]}~{crop_info['opt_solar'][1]} W/m²",
+                    "습도":   f"{crop_info['opt_humid'][0]}~{crop_info['opt_humid'][1]}%",
+                }[top_name]
+
+                st.markdown(f"""
+                <div class="card" style="border-left-color:#52B788;">
+                  <div class="card-title">📝 내 가중치를 바탕으로 가설을 세워보세요</div>
+                  <div style="font-size:13px; color:#555; line-height:2.0;">
+                    우리 모둠은 <b>{top_emoji} {top_name}({int(top_w[1]*100)}%)</b>을 가장 중요하게 설정했어요.<br>
+                    그렇다면 <b>{top_name}</b>이 {display_crop}의 최적 조건({top_opt})에 가장 잘 맞는 지역이 유리하겠죠?<br>
+                    아래 힌트를 보고 가설을 완성해보세요.
+                  </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # 가설 작성을 위한 힌트 — 해당 변인의 지역별 연평균값만 보여줌
+                st.markdown(f"##### {top_emoji} {top_name} 힌트 — 지역별 연평균값")
+                hint_cols = st.columns(len(region_list))
+                for i, (region, df) in enumerate(region_data.items()):
+                    with hint_cols[i]:
+                        if top_name == "기온":
+                            val = f"{df['temp'].mean():.1f}°C"
+                            opt_mid = sum(crop_info['opt_temp']) / 2
+                            gap = abs(df['temp'].mean() - opt_mid)
+                            comment = "✅ 최적에 가까움" if gap < 3 else ("⚠️ 다소 차이" if gap < 6 else "❌ 많이 벗어남")
+                        elif top_name == "일사량":
+                            val = f"{df['solar'].mean():.1f} MJ/m²"
+                            opt_mid = sum(crop_info['opt_solar']) / 2 / 11.6
+                            gap = abs(df['solar'].mean() - opt_mid)
+                            comment = "✅ 최적에 가까움" if gap < 2 else ("⚠️ 다소 차이" if gap < 4 else "❌ 많이 벗어남")
+                        else:
+                            val = f"{df['humid'].mean():.0f}%"
+                            opt_mid = sum(crop_info['opt_humid']) / 2
+                            gap = abs(df['humid'].mean() - opt_mid)
+                            comment = "✅ 최적에 가까움" if gap < 5 else ("⚠️ 다소 차이" if gap < 10 else "❌ 많이 벗어남")
+
+                        c_color = "#52B788" if "✅" in comment else ("#F4A261" if "⚠️" in comment else "#E76F51")
+                        st.markdown(f"""
+                        <div class="card" style="text-align:center; border-left-color:{c_color};">
+                          <div style="font-weight:700; font-size:15px; color:#2D6A4F;">📍 {region}</div>
+                          <div style="font-size:22px; font-weight:700; margin:8px 0;">{val}</div>
+                          <div style="font-size:12px; color:{c_color}; font-weight:600;">{comment}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                st.markdown("---")
+
+                # 가설 문장 완성 — 빈칸 채우기 형식
+                st.markdown("##### ✏️ 가설 문장을 완성해보세요")
+                st.markdown(f"""
+                <div style="background:#F0F7F4; border-radius:10px; padding:16px 20px; font-size:14px; line-height:2.2; border:1px dashed #52B788;">
+                  우리 모둠은 <b>{top_emoji} {top_name}</b>이 스마트팜 입지에서 가장 중요한 요소라고 판단했다.<br>
+                  따라서 {top_name}이 {display_crop}의 최적 범위({top_opt})에 가장 가까운 지역이
+                  스마트팜 운영에 가장 적합할 것이다.
+                </div>
+                """, unsafe_allow_html=True)
+
+                hypo_region = st.selectbox(
+                    f"❓ 위 힌트를 보고, {top_name} 조건이 가장 좋은 지역은?",
                     ["(선택하세요)"] + region_list,
                     key="hypo_best"
                 )
-                hypothesis_reason = st.text_area(
-                    "📌 그렇게 생각한 이유를 써보세요",
-                    placeholder="예) 제주는 겨울에도 온화하여 난방 비용이 적게 들 것 같다.",
-                    height=100, key="hypo_reason"
+                hypo_reason = st.text_area(
+                    "📌 그렇게 생각한 이유 (위 힌트 수치를 활용해서 작성하세요)",
+                    placeholder=f"예) {region_list[0]}은 연평균 {top_name}이 최적 범위와 가장 가깝기 때문에...",
+                    height=90, key="hypo_reason"
                 )
-            with col_h2:
-                hypothesis_factor = st.multiselect(
-                    "🌡️ 가장 중요하다고 생각하는 환경 요소는?",
-                    ["기온", "일사량", "습도"],
-                    key="hypo_factor"
-                )
-                hypothesis_worst = st.selectbox(
-                    "❓ 가장 불리한 지역은 어디일 것 같나요?",
+                hypo_worst = st.selectbox(
+                    "❓ 반대로 가장 불리할 것 같은 지역은?",
                     ["(선택하세요)"] + region_list,
                     key="hypo_worst"
                 )
 
-            if hypothesis_best != "(선택하세요)" and hypothesis_reason:
-                st.markdown("""
-                <div class="info-block">✅ 가설 작성 완료! STEP 2를 펼쳐서 데이터를 탐색하세요.</div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown("""
-                <div class="warning-block">⚠️ 지역 선택과 이유를 모두 작성해야 STEP 2로 넘어갈 수 있습니다.</div>
-                """, unsafe_allow_html=True)
+                hypo_done = hypo_region != "(선택하세요)" and hypo_reason.strip() != ""
+                if hypo_done:
+                    st.session_state["hypo_done"] = True
+                    st.markdown(f"""
+                    <div class="info-block">
+                      ✅ 가설 작성 완료!<br>
+                      가설: <b>{hypo_region}</b>이 {top_name} 조건이 가장 유리하여 최적 입지일 것이다.<br>
+                      STEP 3에서 다른 변인 데이터도 확인하고 검증해보세요.
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    st.session_state["hypo_done"] = False
+                    st.markdown('<div class="warning-block">⚠️ 지역 선택과 이유를 모두 작성해야 STEP 3로 넘어갈 수 있습니다.</div>', unsafe_allow_html=True)
 
-        # ══ STEP 2: 항목별 탐색 + 가중치 설정 ══════════════════════════
-        with st.expander("🔬 STEP 2 · 데이터 탐색 & 가중치 설정", expanded=False):
-            st.markdown("""
-            <div class="card" style="border-left-color:#52B788;">
-              <div class="card-title">📊 항목별 데이터를 살펴보고 가중치를 직접 결정하세요</div>
-              <div style="font-size:13px; color:#555; line-height:1.8;">
-                각 항목이 스마트팜 입지 선정에 얼마나 중요한지 모둠에서 토론 후 결정하세요.<br>
-                <b>세 가중치의 합은 반드시 100이 되어야 합니다.</b>
-              </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            # 항목별 그래프 탐색
-            region_colors = ["#2D6A4F", "#F4A261", "#457B9D"]
-            st.markdown("##### 📈 지역별 항목별 데이터 비교")
-            explore_tab = st.radio(
-                "탐색할 항목 선택",
-                ["🌡️ 기온 적합도", "☀️ 일사량 적합도", "💧 습도 적합도", "💰 에너지 비용"],
-                horizontal=True, key="explore_tab"
-            )
-
-            if explore_tab == "🌡️ 기온 적합도":
-                fig_exp = go.Figure()
-                crop_info = CROPS[display_crop]
-                fig_exp.add_hrect(
-                    y0=crop_info["opt_temp"][0], y1=crop_info["opt_temp"][1],
-                    fillcolor="rgba(82,183,136,0.15)", line_width=0,
-                    annotation_text=f"{display_crop} 최적 범위",
-                    annotation_font_size=11,
-                )
-                for i, (region, df) in enumerate(region_data.items()):
-                    fig_exp.add_trace(go.Scatter(
-                        x=df["month_kr"], y=df["temp"],
-                        mode="lines+markers", name=region,
-                        line=dict(color=region_colors[i], width=2.5),
-                        marker=dict(size=8)
-                    ))
-                fig_exp.update_layout(
-                    title="월별 기온 비교 — 초록 구간이 최적 범위입니다",
-                    xaxis_title="월", yaxis_title="기온 (°C)",
-                    height=320, paper_bgcolor="white", plot_bgcolor="#FAFAFA",
-                    legend=dict(orientation="h", y=1.15),
-                    margin=dict(l=40, r=20, t=50, b=40),
-                )
-                st.plotly_chart(fig_exp, use_container_width=True)
-                st.markdown("""
-                <div class="info-block">
-                  🔍 <b>탐구 포인트:</b> 최적 범위(초록)를 가장 많이 벗어나는 지역은 어디인가요?
-                  벗어난 달에는 어떤 비용이 추가로 필요할까요?
-                </div>""", unsafe_allow_html=True)
-
-            elif explore_tab == "☀️ 일사량 적합도":
-                fig_exp = go.Figure()
-                for i, (region, df) in enumerate(region_data.items()):
-                    fig_exp.add_trace(go.Bar(
-                        x=df["month_kr"], y=df["solar"],
-                        name=region, marker_color=region_colors[i], opacity=0.8,
-                    ))
-                fig_exp.update_layout(
-                    title="월별 일사량 비교 (MJ/m²/day)",
-                    xaxis_title="월", yaxis_title="일사량 (MJ/m²/day)",
-                    height=320, barmode="group",
-                    paper_bgcolor="white", plot_bgcolor="#FAFAFA",
-                    legend=dict(orientation="h", y=1.15),
-                    margin=dict(l=40, r=20, t=50, b=40),
-                )
-                st.plotly_chart(fig_exp, use_container_width=True)
-                # LED 보광 필요 월 표시
-                st.markdown("##### 💡 일사량 부족 → LED 보광 필요 월")
-                cols_led = st.columns(len(region_data))
-                for i, (region, df) in enumerate(region_data.items()):
-                    with cols_led[i]:
-                        need_months = df[df["led_need"] > 30]["month_kr"].tolist()
-                        st.markdown(f"""
-                        <div class="card" style="text-align:center;">
-                          <div style="font-weight:700; color:#2D6A4F; margin-bottom:8px;">📍 {region}</div>
-                          <div style="font-size:12px; color:#777;">LED 보광 필요 월 (30% 이상 부족)</div>
-                          <div style="font-size:14px; font-weight:700; color:#F4A261; margin-top:6px;">
-                            {', '.join(need_months) if need_months else '없음 ✅'}
-                          </div>
-                        </div>""", unsafe_allow_html=True)
-                st.markdown("""
-                <div class="info-block">
-                  🔍 <b>탐구 포인트:</b> LED 보광이 필요한 달이 많을수록 전기 비용이 증가합니다.
-                  일사량이 부족한 달과 지역을 파악해보세요.
-                </div>""", unsafe_allow_html=True)
-
-            elif explore_tab == "💧 습도 적합도":
-                fig_exp = go.Figure()
-                crop_info = CROPS[display_crop]
-                fig_exp.add_hrect(
-                    y0=crop_info["opt_humid"][0], y1=crop_info["opt_humid"][1],
-                    fillcolor="rgba(69,123,157,0.12)", line_width=0,
-                    annotation_text=f"{display_crop} 최적 습도",
-                    annotation_font_size=11,
-                )
-                for i, (region, df) in enumerate(region_data.items()):
-                    fig_exp.add_trace(go.Scatter(
-                        x=df["month_kr"], y=df["humid"],
-                        mode="lines+markers", name=region,
-                        line=dict(color=region_colors[i], width=2.5),
-                        marker=dict(size=8)
-                    ))
-                fig_exp.update_layout(
-                    title="월별 습도 비교 — 파란 구간이 최적 범위입니다",
-                    xaxis_title="월", yaxis_title="습도 (%)",
-                    height=320, paper_bgcolor="white", plot_bgcolor="#FAFAFA",
-                    legend=dict(orientation="h", y=1.15),
-                    margin=dict(l=40, r=20, t=50, b=40),
-                )
-                st.plotly_chart(fig_exp, use_container_width=True)
-                st.markdown("""
-                <div class="info-block">
-                  🔍 <b>탐구 포인트:</b> 습도가 너무 높으면 병해 위험, 너무 낮으면 증산 스트레스가 생깁니다.
-                  어느 지역의 습도가 가장 안정적인가요?
-                </div>""", unsafe_allow_html=True)
-
-            else:  # 에너지 비용
-                energy_data = {}
-                for region, df in region_data.items():
-                    h, c = calc_energy(df, display_crop, display_area)
-                    energy_data[region] = {"난방": h, "냉방": c, "합계": h+c}
-
-                fig_exp = go.Figure()
-                for region, costs in energy_data.items():
-                    fig_exp.add_trace(go.Bar(
-                        name=region,
-                        x=["난방 비용", "냉방 비용", "총 에너지 비용"],
-                        y=[costs["난방"], costs["냉방"], costs["합계"]],
-                        text=[f"{v:,}만원" for v in [costs["난방"], costs["냉방"], costs["합계"]]],
-                        textposition="outside",
-                    ))
-                fig_exp.update_layout(
-                    title=f"지역별 예상 에너지 비용 ({display_area:,}m² 기준)",
-                    xaxis_title="비용 항목", yaxis_title="비용 (만원/년)",
-                    height=320, barmode="group",
-                    paper_bgcolor="white", plot_bgcolor="#FAFAFA",
-                    legend=dict(orientation="h", y=1.15),
-                    margin=dict(l=40, r=20, t=50, b=40),
-                )
-                st.plotly_chart(fig_exp, use_container_width=True)
-                st.markdown("""
-                <div class="info-block">
-                  🔍 <b>탐구 포인트:</b> 난방 비용이 높은 지역은 겨울 기온이 낮다는 의미입니다.
-                  에너지 비용과 생장 효율 중 어느 것을 더 중시할지 모둠에서 토론해보세요.
-                </div>""", unsafe_allow_html=True)
-
-            st.markdown("---")
-
-            # 가중치 설정
-            st.markdown("##### ⚖️ 나만의 가중치 설정 — 세 항목의 합이 100이 되도록 조절하세요")
-            st.markdown("""
-            <div class="info-block" style="margin-bottom:16px;">
-              각 항목이 스마트팜 입지에 얼마나 중요한지 모둠에서 토론 후 결정하세요.
-              가중치에 따라 최종 점수가 달라집니다.
-            </div>""", unsafe_allow_html=True)
-
-            wc1, wc2, wc3 = st.columns(3)
-            with wc1:
-                w_temp = st.slider("🌡️ 기온 가중치", 0, 100, 40, 5, key="w_temp")
-            with wc2:
-                w_solar = st.slider("☀️ 일사량 가중치", 0, 100, 35, 5, key="w_solar")
-            with wc3:
-                w_humid = st.slider("💧 습도 가중치", 0, 100, 25, 5, key="w_humid")
-
-            total_w = w_temp + w_solar + w_humid
-            if total_w == 100:
-                st.markdown(f"""
-                <div class="info-block">
-                  ✅ 가중치 합계: <b>{total_w}</b> — 올바르게 설정되었습니다!
-                  기온 {w_temp}% / 일사량 {w_solar}% / 습도 {w_humid}%
-                </div>""", unsafe_allow_html=True)
-                st.session_state["weights"] = (w_temp/100, w_solar/100, w_humid/100)
-                st.session_state["weights_set"] = True
-            else:
-                diff = 100 - total_w
-                st.markdown(f"""
-                <div class="warning-block">
-                  ⚠️ 현재 합계: <b>{total_w}</b> — {'%d 더 추가' % diff if diff > 0 else '%d 줄여야' % (-diff)}
-                  합니다. 합계가 정확히 100이 되어야 STEP 3을 확인할 수 있습니다.
-                </div>""", unsafe_allow_html=True)
-                st.session_state["weights_set"] = False
-
-            # 가중치 근거 메모
-            w_reason = st.text_area(
-                "📝 이 가중치를 선택한 이유를 모둠에서 토론하고 기록하세요",
-                placeholder="예) 우리는 에너지 비용 절감이 가장 중요하다고 생각해서 기온 가중치를 높게 설정했다. 일사량은 LED로 보완 가능하다고 판단했다.",
-                height=80, key="w_reason"
-            )
-
-        # ══ STEP 3: 결과 확인 ══════════════════════════════════════════
-        weights_ready = st.session_state.get("weights_set", False)
-        hypo_done = (
-            st.session_state.get("hypo_best", "(선택하세요)") != "(선택하세요)"
-            and st.session_state.get("hypo_reason", "") != ""
-        )
+        # ══════════════════════════════════════════════════════
+        # STEP 3: 데이터 탐색 (가설 검증용)
+        # ══════════════════════════════════════════════════════
+        hypo_done = st.session_state.get("hypo_done", False)
 
         with st.expander(
-            "📊 STEP 3 · 나의 점수표 확인" + (" ✅" if weights_ready and hypo_done else " 🔒 (STEP 1·2 완료 후 확인 가능)"),
+            "🔬 STEP 3 · 데이터 탐색 & 가설 검증" + (" ✅" if hypo_done else " 🔒 STEP 2 완료 후 진행"),
             expanded=False
         ):
-            if not (weights_ready and hypo_done):
-                st.markdown("""
-                <div class="warning-block">
-                  🔒 STEP 1(가설 설정)과 STEP 2(가중치 설정, 합계=100)를 먼저 완료하세요.
-                </div>""", unsafe_allow_html=True)
+            if not hypo_done:
+                st.markdown('<div class="warning-block">🔒 STEP 2에서 가설을 먼저 작성해주세요.</div>', unsafe_allow_html=True)
             else:
+                hypo_region = st.session_state.get("hypo_best", "")
                 wt, ws, wh = st.session_state.get("weights", (0.4, 0.35, 0.25))
-                st.markdown("""
-                <div class="info-block" style="margin-bottom:16px;">
-                  ✅ 내가 설정한 가중치로 계산된 점수입니다.
-                  각 지역의 강점과 약점을 분석해보세요.
-                </div>""", unsafe_allow_html=True)
 
-                # 내 가중치로 재계산
-                scored = []
+                st.markdown(f"""
+                <div class="info-block" style="margin-bottom:16px;">
+                  🔎 우리 가설: <b>"{hypo_region}"</b>이 최적 입지일 것이다.<br>
+                  지금부터 나머지 변인 데이터도 탐색하며 가설을 검증해보세요.
+                </div>
+                """, unsafe_allow_html=True)
+
+                explore_item = st.radio(
+                    "📊 탐색할 데이터 선택",
+                    ["🌡️ 기온", "☀️ 일사량", "💧 습도", "💰 에너지 비용"],
+                    horizontal=True, key="explore_item"
+                )
+
+                if explore_item == "🌡️ 기온":
+                    fig_e = go.Figure()
+                    fig_e.add_hrect(y0=crop_info["opt_temp"][0], y1=crop_info["opt_temp"][1],
+                                    fillcolor="rgba(82,183,136,0.15)", line_width=0,
+                                    annotation_text=f"최적 기온 ({crop_info['opt_temp'][0]}~{crop_info['opt_temp'][1]}°C)",
+                                    annotation_font_size=11)
+                    for i, (region, df) in enumerate(region_data.items()):
+                        fig_e.add_trace(go.Scatter(x=df["month_kr"], y=df["temp"],
+                            mode="lines+markers", name=region,
+                            line=dict(color=region_colors[i], width=2.5), marker=dict(size=8)))
+                    fig_e.update_layout(title="월별 기온 — 초록 구간이 최적 범위",
+                        xaxis_title="월", yaxis_title="기온 (°C)", height=300,
+                        paper_bgcolor="white", plot_bgcolor="#FAFAFA",
+                        legend=dict(orientation="h", y=1.15), margin=dict(l=40,r=20,t=50,b=40))
+                    st.plotly_chart(fig_e, use_container_width=True)
+                    st.markdown("""<div class="info-block">
+                      🔍 <b>탐구 포인트:</b> 최적 범위를 벗어난 달이 많은 지역은 난방·냉방 비용이 증가합니다.
+                      내 가설의 지역은 몇 달이나 최적 범위 안에 있나요?
+                    </div>""", unsafe_allow_html=True)
+
+                elif explore_item == "☀️ 일사량":
+                    fig_e = go.Figure()
+                    for i, (region, df) in enumerate(region_data.items()):
+                        fig_e.add_trace(go.Bar(x=df["month_kr"], y=df["solar"],
+                            name=region, marker_color=region_colors[i], opacity=0.8))
+                    fig_e.update_layout(title="월별 일사량 (MJ/m²/day)",
+                        xaxis_title="월", yaxis_title="일사량", height=300, barmode="group",
+                        paper_bgcolor="white", plot_bgcolor="#FAFAFA",
+                        legend=dict(orientation="h", y=1.15), margin=dict(l=40,r=20,t=50,b=40))
+                    st.plotly_chart(fig_e, use_container_width=True)
+                    led_cols = st.columns(len(region_data))
+                    for i, (region, df) in enumerate(region_data.items()):
+                        with led_cols[i]:
+                            need_months = df[df["led_need"] > 30]["month_kr"].tolist()
+                            st.markdown(f"""<div class="card" style="text-align:center;">
+                              <div style="font-weight:700; color:#2D6A4F;">📍 {region}</div>
+                              <div style="font-size:11px; color:#777; margin:4px 0;">LED 보광 필요 월</div>
+                              <div style="font-size:13px; font-weight:700; color:#F4A261;">
+                                {', '.join(need_months) if need_months else '없음 ✅'}
+                              </div>
+                            </div>""", unsafe_allow_html=True)
+                    st.markdown("""<div class="info-block">
+                      🔍 <b>탐구 포인트:</b> LED 보광이 필요한 달이 많을수록 전기 비용이 올라갑니다.
+                      일사량과 에너지 비용은 어떤 관계가 있을까요?
+                    </div>""", unsafe_allow_html=True)
+
+                elif explore_item == "💧 습도":
+                    fig_e = go.Figure()
+                    fig_e.add_hrect(y0=crop_info["opt_humid"][0], y1=crop_info["opt_humid"][1],
+                                    fillcolor="rgba(69,123,157,0.12)", line_width=0,
+                                    annotation_text=f"최적 습도 ({crop_info['opt_humid'][0]}~{crop_info['opt_humid'][1]}%)",
+                                    annotation_font_size=11)
+                    for i, (region, df) in enumerate(region_data.items()):
+                        fig_e.add_trace(go.Scatter(x=df["month_kr"], y=df["humid"],
+                            mode="lines+markers", name=region,
+                            line=dict(color=region_colors[i], width=2.5), marker=dict(size=8)))
+                    fig_e.update_layout(title="월별 습도 — 파란 구간이 최적 범위",
+                        xaxis_title="월", yaxis_title="습도 (%)", height=300,
+                        paper_bgcolor="white", plot_bgcolor="#FAFAFA",
+                        legend=dict(orientation="h", y=1.15), margin=dict(l=40,r=20,t=50,b=40))
+                    st.plotly_chart(fig_e, use_container_width=True)
+                    st.markdown("""<div class="info-block">
+                      🔍 <b>탐구 포인트:</b> 습도가 너무 높으면 병해 위험, 너무 낮으면 증산 스트레스가 생깁니다.
+                      어느 지역의 습도가 가장 안정적으로 최적 범위 안에 있나요?
+                    </div>""", unsafe_allow_html=True)
+
+                else:  # 에너지 비용
+                    fig_e = go.Figure()
+                    for i, (region, df) in enumerate(region_data.items()):
+                        h, c = calc_energy(df, display_crop, display_area)
+                        fig_e.add_trace(go.Bar(
+                            name=region,
+                            x=["난방 비용", "냉방 비용", "총 비용"],
+                            y=[h, c, h+c],
+                            marker_color=region_colors[i],
+                            text=[f"{v:,}만원" for v in [h, c, h+c]],
+                            textposition="outside",
+                        ))
+                    fig_e.update_layout(title=f"예상 에너지 비용 ({display_area:,}m² 기준, 만원/년)",
+                        barmode="group", height=300,
+                        paper_bgcolor="white", plot_bgcolor="#FAFAFA",
+                        legend=dict(orientation="h", y=1.15), margin=dict(l=40,r=20,t=50,b=40))
+                    st.plotly_chart(fig_e, use_container_width=True)
+                    st.markdown("""<div class="info-block">
+                      🔍 <b>탐구 포인트:</b> 난방 비용이 높다는 것은 겨울 기온이 낮다는 의미입니다.
+                      기온 가중치를 높게 설정한 모둠은 이 비용을 중요한 판단 근거로 삼을 수 있어요.
+                    </div>""", unsafe_allow_html=True)
+
+                st.markdown("---")
+
+                # 내 가중치로 계산된 점수표 (순위 숨김)
+                st.markdown("##### 📋 내 가중치로 계산한 항목별 점수")
+                scored_step3 = []
                 for region, df in region_data.items():
-                    my_score = (
-                        df["temp_score"].mean()  * wt +
-                        df["solar_score"].mean() * ws +
-                        df["humid_score"].mean() * wh
-                    )
-                    heating, cooling = calc_energy(df, display_crop, display_area)
-                    scored.append({
+                    scored_step3.append({
                         "region": region,
-                        "df": df,
-                        "my_score": round(my_score, 1),
-                        "heating": heating,
-                        "cooling": cooling,
+                        "기온 점수": round(df["temp_score"].mean(), 1),
+                        "일사량 점수": round(df["solar_score"].mean(), 1),
+                        "습도 점수": round(df["humid_score"].mean(), 1),
+                        "종합 점수": round(
+                            df["temp_score"].mean()*wt +
+                            df["solar_score"].mean()*ws +
+                            df["humid_score"].mean()*wh, 1),
                     })
 
-                # 항목별 점수 테이블 (순위 숨김)
-                st.markdown("##### 📋 항목별 점수표")
-                header_cols = st.columns([2, 2, 2, 2, 2])
-                headers = ["지역", "기온 점수", "일사량 점수", "습도 점수", "내 종합 점수"]
-                for col, h in zip(header_cols, headers):
-                    col.markdown(f"<div style='font-weight:700; font-size:13px; color:#2D6A4F;'>{h}</div>",
-                                 unsafe_allow_html=True)
+                hdr = st.columns([2,2,2,2,2])
+                for col, h in zip(hdr, ["지역","기온 점수","일사량 점수","습도 점수","종합 점수(내 가중치)"]):
+                    col.markdown(f"<b style='font-size:12px; color:#2D6A4F;'>{h}</b>", unsafe_allow_html=True)
                 st.markdown("<hr style='margin:4px 0 8px;'>", unsafe_allow_html=True)
-
-                for s in scored:
-                    row_cols = st.columns([2, 2, 2, 2, 2])
-                    df = s["df"]
-                    values = [
-                        s["region"],
-                        f"{df['temp_score'].mean():.1f}점",
-                        f"{df['solar_score'].mean():.1f}점",
-                        f"{df['humid_score'].mean():.1f}점",
-                        f"**{s['my_score']}점**",
-                    ]
-                    colors = ["#1B2D24", "#E76F51", "#F4A261", "#457B9D", "#2D6A4F"]
-                    for col, val, color in zip(row_cols, values, colors):
-                        col.markdown(f"<div style='font-size:14px; color:{color};'>{val}</div>",
-                                     unsafe_allow_html=True)
+                for s in scored_step3:
+                    row = st.columns([2,2,2,2,2])
+                    row[0].markdown(f"**📍 {s['region']}**")
+                    row[1].markdown(f"{s['기온 점수']}점")
+                    row[2].markdown(f"{s['일사량 점수']}점")
+                    row[3].markdown(f"{s['습도 점수']}점")
+                    row[4].markdown(f"**{s['종합 점수']}점**")
 
                 st.markdown("---")
-
-                # 레이더 차트 (항목별 강약점 파악용)
-                fig_radar_all = go.Figure()
-                radar_colors = ["#2D6A4F", "#F4A261", "#457B9D"]
-                for i, s in enumerate(scored):
-                    df = s["df"]
-                    fig_radar_all.add_trace(go.Scatterpolar(
-                        r=[df["temp_score"].mean(), df["solar_score"].mean(),
-                           df["humid_score"].mean(), s["my_score"]],
-                        theta=["기온 적합도", "일사량 적합도", "습도 적합도", "종합 점수"],
-                        fill="toself", name=s["region"],
-                        line=dict(color=radar_colors[i]),
-                        opacity=0.7,
-                    ))
-                fig_radar_all.update_layout(
-                    polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-                    title=dict(text="지역별 강약점 레이더 차트", font=dict(size=14)),
-                    height=340, paper_bgcolor="white",
-                    legend=dict(orientation="h", y=-0.1),
-                    margin=dict(l=20, r=20, t=50, b=40),
-                )
-
-                # 에너지 비용 비교
-                fig_energy = go.Figure()
-                for i, s in enumerate(scored):
-                    fig_energy.add_trace(go.Bar(
-                        name=s["region"],
-                        x=["난방 비용", "냉방 비용"],
-                        y=[s["heating"], s["cooling"]],
-                        marker_color=radar_colors[i],
-                        text=[f"{s['heating']:,}", f"{s['cooling']:,}"],
-                        textposition="outside",
-                    ))
-                fig_energy.update_layout(
-                    title="예상 에너지 비용 비교 (만원/년)",
-                    barmode="group", height=280,
-                    paper_bgcolor="white", plot_bgcolor="#FAFAFA",
-                    legend=dict(orientation="h", y=1.15),
-                    margin=dict(l=30, r=20, t=50, b=30),
-                )
-
-                rc1, rc2 = st.columns([3, 2])
-                with rc1:
-                    st.plotly_chart(fig_radar_all, use_container_width=True)
-                with rc2:
-                    st.plotly_chart(fig_energy, use_container_width=True)
-
-                # 월별 상세 데이터 (지역 선택해서 보기)
-                st.markdown("##### 🔍 지역별 월별 상세 데이터")
-                detail_region = st.selectbox("상세 데이터를 볼 지역 선택", region_list, key="detail_region")
-                df_detail = region_data[detail_region]
-                fig_detail = make_subplots(
-                    rows=1, cols=3,
-                    subplot_titles=["기온 적합도 점수", "일사량 적합도 점수", "습도 적합도 점수"],
-                    horizontal_spacing=0.08
-                )
-                for col_idx, (col_name, color) in enumerate([
-                    ("temp_score","#E76F51"), ("solar_score","#F4A261"), ("humid_score","#457B9D")
-                ], 1):
-                    fig_detail.add_trace(go.Bar(
-                        x=df_detail["month_kr"], y=df_detail[col_name],
-                        marker_color=color, showlegend=False,
-                    ), row=1, col=col_idx)
-                    fig_detail.add_hline(y=70, line_dash="dot", line_color="#aaa", row=1, col=col_idx)
-                fig_detail.update_layout(
-                    height=260, paper_bgcolor="white", plot_bgcolor="#FAFAFA",
-                    margin=dict(l=30, r=20, t=40, b=30),
-                )
-                fig_detail.update_yaxes(range=[0, 110])
-                st.plotly_chart(fig_detail, use_container_width=True)
-
-                # 탐구 기록 폼
-                st.markdown("---")
-                st.markdown("##### ✏️ 탐구 결과 기록")
-                col_note1, col_note2 = st.columns(2)
-                with col_note1:
-                    finding = st.text_area(
-                        "📊 데이터에서 발견한 점",
-                        placeholder="예) 제주는 겨울 기온이 높아 난방 비용이 가장 낮았지만, 여름 습도가 높아 습도 점수가 낮았다.",
-                        height=100, key="finding"
-                    )
-                with col_note2:
-                    hypo_check = st.text_area(
-                        "🔄 가설과 비교 — 예측과 다른 점은?",
-                        placeholder="예) 서울이 가장 불리할 것이라 예상했는데, 일사량 점수는 오히려 높게 나왔다.",
-                        height=100, key="hypo_check"
-                    )
-                st.markdown("""
-                <div class="info-block">
-                  ✅ 기록을 완료했다면 <b>4차시 결과 발표</b> 탭에서 모둠 결론을 정리하고 발표하세요!
-                </div>""", unsafe_allow_html=True)
+                st.markdown("##### ✏️ 가설 검증 기록")
+                fc1, fc2 = st.columns(2)
+                with fc1:
+                    st.text_area("📊 데이터를 탐색하며 발견한 점",
+                        placeholder="예) 제주는 기온은 좋지만 여름 습도가 매우 높아 습도 점수가 낮았다.",
+                        height=90, key="finding")
+                with fc2:
+                    st.text_area("🔄 가설과 비교 — 예상과 다른 점이 있었나요?",
+                        placeholder="예) 기온만 보면 제주가 유리했지만, 종합 점수는 예상과 달랐다.",
+                        height=90, key="hypo_check")
+                st.markdown('<div class="info-block">✅ 기록 완료 후 <b>4차시 결과 발표</b> 탭으로 넘어가세요!</div>', unsafe_allow_html=True)
 
 
-# ════════════════════════════════════════════════════════
 # TAB 4 — 결과 발표 (자기주도 탐구형)
 # ════════════════════════════════════════════════════════
 with tab4:
