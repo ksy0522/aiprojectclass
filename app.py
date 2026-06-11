@@ -265,7 +265,7 @@ def fetch_openmeteo(lat, lon):
     end   = datetime.now().strftime("%Y-%m-%d")
     start = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
     url = (
-        f"https://api.open-meteo.com/v1/forecast"
+        f"https://archive-api.open-meteo.com/v1/archive"
         f"?latitude={lat}&longitude={lon}"
         f"&hourly=temperature_2m,relativehumidity_2m"
         f"&start_date={start}&end_date={end}"
@@ -430,6 +430,13 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     run_btn = st.button("🔍 분석 시작", use_container_width=True)
+    if run_btn:
+        st.session_state["run_analysis"] = True
+        st.session_state["analysis_regions"] = list(selected_regions)
+        st.session_state["analysis_crop"] = selected_crop
+        st.session_state["analysis_area"] = farm_area
+        # 지역/작물 변경 시 캐시 초기화
+        st.session_state.pop("region_data_cache", None)
 
 
 # ── 메인 영역 ─────────────────────────────────────────────────────────────────
@@ -557,23 +564,23 @@ with tab1:
 # ════════════════════════════════════════════════════════
 region_data = {}
 
-if not selected_regions:
-    for tab in [tab2, tab3, tab4]:
-        with tab:
-            st.info("👈 사이드바에서 지역을 선택하고 **분석 시작** 버튼을 누르세요.")
-else:
-    # 자동 로드 또는 버튼 클릭 시 로드
-    if run_btn or "region_data_cache" not in st.session_state:
-        st.session_state["region_data_cache"] = {}
-        for r in selected_regions:
-            meteo, nasa = get_region_data(r)
-            df = build_monthly_df(meteo, nasa)
-            if df is not None:
-                df = calc_suitability(df, selected_crop)
-                df = calc_led_supplement(df, selected_crop)
-                st.session_state["region_data_cache"][r] = df
+# 분석 실행: 버튼을 눌렀을 때만 API 호출 및 캐시 저장
+if st.session_state.get("run_analysis") and "region_data_cache" not in st.session_state:
+    load_regions = st.session_state.get("analysis_regions", selected_regions)
+    load_crop    = st.session_state.get("analysis_crop", selected_crop)
+    cache = {}
+    for r in load_regions:
+        meteo, nasa = get_region_data(r)
+        df = build_monthly_df(meteo, nasa)
+        if df is not None:
+            df = calc_suitability(df, load_crop)
+            df = calc_led_supplement(df, load_crop)
+            cache[r] = df
+    st.session_state["region_data_cache"] = cache
 
-    region_data = st.session_state.get("region_data_cache", {})
+region_data = st.session_state.get("region_data_cache", {})
+display_crop = st.session_state.get("analysis_crop", selected_crop)
+display_area = st.session_state.get("analysis_area", farm_area)
 
 
 # ════════════════════════════════════════════════════════
@@ -617,11 +624,11 @@ with tab2:
 
         # 기온 비교 그래프
         fig_temp = go.Figure()
-        crop_info = CROPS[selected_crop]
+        crop_info = CROPS[display_crop]
         fig_temp.add_hrect(
             y0=crop_info["opt_temp"][0], y1=crop_info["opt_temp"][1],
             fillcolor="rgba(82,183,136,0.12)", line_width=0,
-            annotation_text=f"{selected_crop} 최적 기온 범위",
+            annotation_text=f"{display_crop} 최적 기온 범위",
             annotation_position="top left",
             annotation_font_size=11,
         )
@@ -688,7 +695,7 @@ with tab2:
             # 작물 생장 조건 참고표
             st.markdown(f"""
             <div class="card">
-              <div class="card-title">🌿 {selected_crop} 최적 생장 조건 <span class="tag-bio">생명과학</span></div>
+              <div class="card-title">🌿 {display_crop} 최적 생장 조건 <span class="tag-bio">생명과학</span></div>
               <table style="width:100%; font-size:13px; border-collapse:collapse;">
                 <tr style="border-bottom:1px solid #eee;">
                   <td style="padding:8px; color:#777;">최적 기온</td>
@@ -727,7 +734,7 @@ with tab3:
         st.info("👈 사이드바에서 지역을 선택하고 **분석 시작**을 누르세요.")
     else:
         for region, df in region_data.items():
-            heating, cooling = calc_energy(df, selected_crop, farm_area)
+            heating, cooling = calc_energy(df, display_crop, display_area)
             annual_score = df["total_score"].mean()
 
             st.markdown(f"""
@@ -829,8 +836,8 @@ with tab3:
                     {'·'.join(high_months) if high_months else '해당 없음'}<br>
                     <b>⚠️ 보완 필요 달:</b><br>
                     {'·'.join(low_months) if low_months else '없음'}<br>
-                    <b>🏗️ 분석 면적:</b> {farm_area:,} m²<br>
-                    <b>🌿 선택 작물:</b> {CROPS[selected_crop]['emoji']} {selected_crop}
+                    <b>🏗️ 분석 면적:</b> {display_area:,} m²<br>
+                    <b>🌿 선택 작물:</b> {CROPS[display_crop]['emoji']} {display_crop}
                   </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -855,12 +862,12 @@ with tab4:
         # 종합 점수 산출
         summary = []
         for region, df in region_data.items():
-            heating, cooling = calc_energy(df, selected_crop, farm_area)
+            heating, cooling = calc_energy(df, display_crop, display_area)
             score_grow  = df["total_score"].mean()
             score_led   = 100 - df["led_need"].mean()
             total_cost  = heating + cooling
             max_cost    = max(
-                sum(calc_energy(d, selected_crop, farm_area))
+                sum(calc_energy(d, display_crop, display_area))
                 for d in region_data.values()
             )
             score_cost  = max(0, 100 - (total_cost / (max_cost + 1)) * 60)
@@ -967,7 +974,7 @@ with tab4:
                 avg_led = df_r["led_need"].mean()
 
                 strength = "일사량 풍부" if df_r["solar"].mean() > 13 else \
-                           "온화한 기온" if abs(df_r["temp"].mean() - sum(CROPS[selected_crop]["opt_temp"])/2) < 3 else \
+                           "온화한 기온" if abs(df_r["temp"].mean() - sum(CROPS[display_crop]["opt_temp"])/2) < 3 else \
                            "안정적인 습도"
                 weakness = "겨울 난방 필요" if s["난방(만원)"] > s["냉방(만원)"] else "여름 냉방 필요"
 
