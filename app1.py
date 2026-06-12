@@ -257,6 +257,15 @@ CROPS = {
 
 MONTHS_KR = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"]
 
+def solar_wm2_to_mj(w):
+    """W/m² → MJ/m²/day 환산 (역수: ÷11.6)"""
+    return round(w / 11.6, 1)
+
+def opt_solar_mj_str(crop_info):
+    """작물의 최적 일사량을 MJ/m²/day 표시 문자열로 반환"""
+    lo, hi = crop_info["opt_solar"]
+    return f"{solar_wm2_to_mj(lo)}~{solar_wm2_to_mj(hi)} MJ/m²/day"
+
 
 # ── API 호출 함수 ─────────────────────────────────────────────────────────────
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -696,6 +705,7 @@ with tab_lab:
           </div>
         </div>""", unsafe_allow_html=True)
         lab_solar = st.slider("일사량 (W/m²)", 0, 800, 300, 10, key="lab_solar")
+        st.caption(f"≈ {solar_wm2_to_mj(lab_solar)} MJ/m²/day  (2차시 그래프와 동일 단위)")
 
         st.markdown(f"""<div class="card" style="border-left-color:#E76F51; margin-bottom:6px; padding:12px 16px;">
           <div class="card-title" style="margin-bottom:4px;">🌡️ 온도 <span class="tag-bio">생명과학</span></div>
@@ -752,13 +762,13 @@ with tab_lab:
         # 일사량 판단
         s_min, s_max = lc["opt_solar"]
         if lab_solar < s_min * 0.3:
-            feedbacks.append(("warning", f"⚠️ <b>일사량 부족</b> ({lab_solar} W/m²): 광보상점에 미치지 못해 광합성보다 호흡이 우세합니다. LED 보광이 필요합니다."))
+            feedbacks.append(("warning", f"⚠️ <b>일사량 부족</b> ({lab_solar} W/m² ≈ {solar_wm2_to_mj(lab_solar)} MJ/m²/day): 광보상점에 미치지 못해 광합성보다 호흡이 우세합니다. LED 보광이 필요합니다."))
         elif lab_solar < s_min:
-            feedbacks.append(("warning", f"⚠️ <b>일사량 낮음</b> ({lab_solar} W/m²): 광합성은 가능하지만 최적 범위({s_min}~{s_max} W/m²)보다 낮습니다."))
+            feedbacks.append(("warning", f"⚠️ <b>일사량 낮음</b> ({lab_solar} W/m² ≈ {solar_wm2_to_mj(lab_solar)} MJ/m²/day): 광합성은 가능하지만 최적 범위({opt_solar_mj_str(lc)})보다 낮습니다."))
         elif lab_solar <= s_max:
-            feedbacks.append(("info", f"✅ <b>일사량 적정</b> ({lab_solar} W/m²): {lab_crop}의 최적 광합성 범위 내에 있습니다."))
+            feedbacks.append(("info", f"✅ <b>일사량 적정</b> ({lab_solar} W/m² ≈ {solar_wm2_to_mj(lab_solar)} MJ/m²/day): {lab_crop}의 최적 광합성 범위 내에 있습니다."))
         else:
-            feedbacks.append(("warning", f"⚠️ <b>일사량 과다</b> ({lab_solar} W/m²): 광포화점({s_max} W/m²)을 초과하여 광억제가 발생할 수 있습니다."))
+            feedbacks.append(("warning", f"⚠️ <b>일사량 과다</b> ({lab_solar} W/m² ≈ {solar_wm2_to_mj(lab_solar)} MJ/m²/day): 광포화점({solar_wm2_to_mj(s_max)} MJ/m²/day)을 초과하여 광억제가 발생할 수 있습니다."))
 
         # 온도 판단
         t_min, t_max = lc["opt_temp"]
@@ -818,7 +828,7 @@ with tab_lab:
             fill="tozeroy", fillcolor="rgba(82,183,136,0.08)"
         ))
         fig_solar.add_vline(x=lab_solar, line_dash="dash", line_color="#F4A261", line_width=2,
-                            annotation_text=f"현재 {lab_solar} W/m²", annotation_font_size=11)
+                            annotation_text=f"현재 {lab_solar} W/m² ({solar_wm2_to_mj(lab_solar)} MJ/m²/day)", annotation_font_size=10)
         fig_solar.add_vline(x=comp_point, line_dash="dot", line_color="#aaa", line_width=1,
                             annotation_text="광보상점", annotation_position="bottom right",
                             annotation_font_size=10)
@@ -827,7 +837,7 @@ with tab_lab:
                             annotation_font_size=10)
         fig_solar.update_layout(
             title=dict(text="☀️ 일사량 vs 광합성 속도", font=dict(size=13, color="#1B2D24")),
-            xaxis_title="일사량 (W/m²)", yaxis_title="광합성 속도 (%)",
+            xaxis_title="일사량 (W/m² · ÷11.6 = MJ/m²/day)", yaxis_title="광합성 속도 (%)",
             yaxis=dict(range=[0, 110]),
             height=240, paper_bgcolor="white", plot_bgcolor="#FAFAFA",
             margin=dict(l=40, r=20, t=40, b=35),
@@ -1054,7 +1064,7 @@ with tab2:
                 </tr>
                 <tr style="border-bottom:1px solid #eee;">
                   <td style="padding:8px; color:#777;">최적 일사량</td>
-                  <td style="padding:8px; font-weight:700;">{crop_info['opt_solar'][0]}~{crop_info['opt_solar'][1]} W/m²</td>
+                  <td style="padding:8px; font-weight:700;">{opt_solar_mj_str(crop_info)}</td>
                 </tr>
                 <tr>
                   <td style="padding:8px; color:#777;">생장 기간</td>
@@ -1111,7 +1121,7 @@ with tab3:
                 <tr style="border-bottom:1px solid #eee;">
                   <td style="padding:8px;"><span class="tag-physics">물리</span> ☀️ 일사량</td>
                   <td style="padding:8px; color:#555;">빛 에너지 → 광합성 ATP·NADPH 생성<br>부족하면 LED 보광 비용 발생</td>
-                  <td style="padding:8px; font-weight:700;">{crop_info['opt_solar'][0]}~{crop_info['opt_solar'][1]} W/m²</td>
+                  <td style="padding:8px; font-weight:700;">{opt_solar_mj_str(crop_info)}</td>
                 </tr>
                 <tr>
                   <td style="padding:8px;"><span class="tag-bio">생명과학</span> 💧 습도</td>
@@ -1194,7 +1204,7 @@ with tab3:
                 top_emoji = {"기온": "🌡️", "일사량": "☀️", "습도": "💧"}[top_name]
                 top_opt = {
                     "기온":   f"{crop_info['opt_temp'][0]}~{crop_info['opt_temp'][1]}°C",
-                    "일사량": f"{crop_info['opt_solar'][0]}~{crop_info['opt_solar'][1]} W/m²",
+                    "일사량": opt_solar_mj_str(crop_info),
                     "습도":   f"{crop_info['opt_humid'][0]}~{crop_info['opt_humid'][1]}%",
                 }[top_name]
 
